@@ -1,0 +1,38 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Diego Campos",
+    "email": "xdiegopianista@gmail.com",
+    "webpageUrl": {
+      "url": "https://huggingface.co/spaces/booskyy/transparencia-cr"
+    }
+  },
+  "projects": [{
+    "guid": "transparencia-cr",
+    "name": "TransparenciaCR",
+    "description": "AI-powered civic platform that makes Costa Rican legislative sessions searchable via natural language chat. Uses Whisper + RAG to transcribe and index thousands of hours of public sessions from all three branches of government.",
+    "webpageUrl": { "url": "https://github.com/booskyy/transparencia-cr" },
+    "repositoryUrl": { "url": "https://github.com/booskyy/transparencia-cr" },
+    "licenses": ["spdx:MIT"],
+    "tags": ["civic-tech", "transparency", "nlp", "rag", "spanish", "costa-rica", "democracy"]
+  }],
+  "funding": {
+    "channels": [{
+      "guid": "kofi",
+      "type": "payment-provider",
+      "address": "https://ko-fi.com/xdiegocampos",
+      "description": "Ko-fi donations"
+    }],
+    "plans": [{
+      "guid": "maintainer",
+      "status": "active",
+      "name": "Maintainer support",
+      "amount": 500,
+      "currency": "USD",
+      "frequency": "monthly",
+      "channels": ["kofi"]
+    }]
+  }
+}
