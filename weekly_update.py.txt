@@ -1,0 +1,154 @@
+import yt_dlp, json, os, time, logging
+from faster_whisper import WhisperModel
+from datetime import datetime
+from pathlib import Path
+
+logging.basicConfig(
+    filename="logs/sync.log",
+    level=logging.INFO,
+    format="%(asctime)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M"
+)
+log = logging.getLogger()
+
+CARPETA  = "transcripciones"
+LOG_FILE = "procesados.json"
+CANALES  = [
+    # Fase 1 — solo Legislativo
+    {"url": "https://www.youtube.com/@AsambleaCRC/videos",
+     "poder": "legislativo", "max": 20},
+    # Fase 2 — descomentá cuando estés listo
+    # {"url": "https://www.youtube.com/@CanalJudicialCostaRica/videos",
+    #  "poder": "judicial", "max": 10},
+    # {"url": "https://www.youtube.com/@presidenciacr/videos",
+    #  "poder": "ejecutivo", "max": 10},
+]
+
+model = WhisperModel("small", device="cpu", compute_type="int8")
+
+def cargar_log():
+    if Path(LOG_FILE).exists():
+        with open(LOG_FILE) as f: return set(json.load(f))
+    return set()
+
+def guardar_log(ids):
+    with open(LOG_FILE, "w") as f: json.dump(list(ids), f)
+
+def detectar_poder(titulo, poder_default):
+    t = titulo.lower()
+    if any(x in t for x in ["plenario","comisión","asamblea","diputad"]):
+        return "legislativo"
+    if any(x in t for x in ["presidencia","ejecutivo","consejo de gobierno"]):
+        return "ejecutivo"
+    if any(x in t for x in ["judicial","corte plena","magistrado","sala"]):
+        return "judicial"
+    if any(x in t for x in ["municipal","concejo","alcald"]):
+        return "municipal"
+    return poder_default
+
+def procesar_video(vid, url, poder_default, procesados):
+    txt = f"{CARPETA}/{vid}.txt"
+    if os.path.exists(txt):
+        procesados.add(vid); return
+
+    opts = {
+        "format": "bestaudio[ext=m4a]/bestaudio",
+        "outtmpl": f"{CARPETA}/{vid}.%(ext)s",
+        "quiet": True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+        titulo = info.get("title", vid)
+        fecha  = info.get("upload_date", "")
+        poder  = detectar_poder(titulo, poder_default)
+
+        audio = None
+        for ext in ["m4a", "webm", "opus"]:
+            ruta = f"{CARPETA}/{vid}.{ext}"
+            if os.path.exists(ruta): audio = ruta; break
+        if not audio: raise FileNotFoundError("No se encontró audio")
+
+        segs, _ = model.transcribe(audio, language="es", beam_size=5)
+        lineas  = [f"[{int(s.start)}s] {s.text.strip()}" for s in segs]
+
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write(f"Título: {titulo}\nFecha: {fecha}\n"
+                    f"URL: https://youtube.com/watch?v={vid}\n"
+                    f"Poder: {poder}\n\n" + "\n".join(lineas))
+
+        with open(f"{CARPETA}/{vid}.json", "w") as f:
+            json.dump({"id":vid,"titulo":titulo,"fecha":fecha,
+                       "url":f"https://youtube.com/watch?v={vid}",
+                       "poder":poder}, f, ensure_ascii=False)
+
+        os.remove(audio)
+        procesados.add(vid)
+        guardar_log(procesados)
+        log.info(f"OK [{poder}] {titulo[:60]}")
+        time.sleep(3)  # pausa entre videos para no sobrecargar YouTube
+
+    except Exception as e:
+        log.error(f"Error {vid}: {e}")
+
+def reingresar_nuevos():
+    """Agrega los nuevos .txt a ChromaDB sin borrar los existentes."""
+    from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
+    from llama_index.vector_stores.chroma import ChromaVectorStore
+    import chromadb
+
+    db  = chromadb.PersistentClient(path="./chroma_db")
+    col = db.get_or_create_collection("transparencia_cr")
+    vs  = ChromaVectorStore(chroma_collection=col)
+    sc  = StorageContext.from_defaults(vector_store=vs)
+
+    # Solo documentos nuevos (que no estén en la colección)
+    ids_existentes = set(col.get()["ids"]) if col.count() > 0 else set()
+    nuevos = []
+    for txt in Path(CARPETA).glob("*.txt"):
+        doc_id = txt.stem
+        if doc_id not in ids_existentes:
+            nuevos.append(txt)
+
+    if not nuevos:
+        log.info("No hay documentos nuevos para ingresar.")
+        return
+
+    log.info(f"Ingresando {len(nuevos)} documentos nuevos a ChromaDB...")
+    docs = SimpleDirectoryReader(
+        input_files=[str(p) for p in nuevos]
+    ).load_data()
+    VectorStoreIndex.from_documents(docs, storage_context=sc, show_progress=False)
+    log.info(f"Base de datos actualizada. Total: {col.count()} fragmentos.")
+
+def main():
+    os.makedirs(CARPETA, exist_ok=True)
+    os.makedirs("logs", exist_ok=True)
+    procesados = cargar_log()
+
+    log.info(f"=== Sync semanal iniciado — {datetime.now().strftime('%Y-%m-%d')} ===")
+    total_nuevos = 0
+
+    for canal in CANALES:
+        log.info(f"Canal: {canal['url']}")
+        opts_lista = {"quiet": True, "extract_flat": True,
+                      "playlist_end": canal["max"]}
+        with yt_dlp.YoutubeDL(opts_lista) as ydl:
+            info  = ydl.extract_info(canal["url"], download=False)
+            vids  = [e for e in info.get("entries", [])
+                     if e and e.get("id") not in procesados]
+
+        log.info(f"  Videos nuevos encontrados: {len(vids)}")
+        for v in vids:
+            procesar_video(v["id"],
+                           f"https://youtube.com/watch?v={v['id']}",
+                           canal["poder"], procesados)
+            total_nuevos += 1
+
+    if total_nuevos > 0:
+        reingresar_nuevos()
+
+    log.info(f"=== Sync terminado. Nuevos procesados: {total_nuevos} ===\n")
+
+if __name__ == "__main__":
+    main()

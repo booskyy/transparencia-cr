@@ -1,0 +1,10 @@
+yt-dlp
+faster-whisper
+llama-index
+llama-index-vector-stores-chroma
+chromadb
+streamlit
+python-dotenv
+tqdm
+fastapi
+uvicorn

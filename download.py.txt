@@ -1,0 +1,55 @@
+import yt_dlp, json, os
+from faster_whisper import WhisperModel
+from tqdm import tqdm
+
+model = WhisperModel("small", device="cpu", compute_type="int8")
+
+def transcribir(url, carpeta="transcripciones"):
+    os.makedirs(carpeta, exist_ok=True)
+    
+    # Solo descarga audio (no video) → 10x menos espacio
+    opts = {
+        "format": "bestaudio[ext=m4a]/bestaudio",
+        "outtmpl": f"{carpeta}/%(id)s.%(ext)s",
+        "quiet": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+    
+    vid   = info["id"]
+    titulo = info["title"]
+    fecha  = info.get("upload_date", "")
+    
+    # Evitar reprocesar
+    txt_path = f"{carpeta}/{vid}.txt"
+    if os.path.exists(txt_path):
+        print(f"Ya existe: {titulo}")
+        return
+
+    print(f"Transcribiendo: {titulo}")
+    audio = f"{carpeta}/{vid}.m4a"
+    segs, _ = model.transcribe(audio, language="es", beam_size=5, word_timestamps=False)
+
+    lineas = [f"[{int(s.start)}s] {s.text.strip()}" for s in segs]
+    texto  = "\n".join(lineas)
+
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(f"Título: {titulo}\nFecha: {fecha}\nURL: https://youtube.com/watch?v={vid}\nPoder: legislativo\n\n{texto}")
+
+    with open(f"{carpeta}/{vid}.json", "w") as f:
+        json.dump({"id": vid, "titulo": titulo, "fecha": fecha,
+                   "url": f"https://youtube.com/watch?v={vid}",
+                   "poder": "legislativo"}, f, ensure_ascii=False)
+
+    # Borra el audio para liberar espacio
+    os.remove(audio)
+    print(f"✅ {titulo}")
+
+# Agrega URLs reales del canal @AsambleaCRC
+urls = [
+    "https://www.youtube.com/watch?v=YtF5Kr3toPU", "https://www.youtube.com/watch?v=hyfr7cyZGJU", "https://www.youtube.com/watch?v=anN_q2GH7GA", "https://www.youtube.com/watch?v=QspXneRhZIg", "https://www.youtube.com/watch?v=Elvwukn3Lk0",  # cambia por IDs reales
+]
+
+for u in tqdm(urls):
+    try: transcribir(u)
+    except Exception as e: print(f"Error: {e}")

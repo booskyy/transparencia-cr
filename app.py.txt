@@ -1,0 +1,145 @@
+import streamlit as st
+from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.vector_stores.chroma import ChromaVectorStore
+import chromadb
+
+st.set_page_config(
+    page_title="TransparenciaCR",
+    page_icon="🇨🇷",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# CSS personalizado — esto controla TODO el diseño
+st.markdown("""
+<style>
+/* Fuente y fondo */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+/* Oculta el menú de Streamlit */
+#MainMenu, footer, header { visibility: hidden; }
+
+/* Header principal */
+.header-box {
+    background: linear-gradient(135deg, #1a3c5e 0%, #0d6efd 100%);
+    padding: 2rem 2.5rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    color: white;
+}
+.header-box h1 { color: white; margin: 0 0 0.25rem; font-size: 1.8rem; }
+.header-box p  { color: rgba(255,255,255,0.8); margin: 0; font-size: 0.95rem; }
+
+/* Selector de poderes */
+.stSelectbox > div > div {
+    border: 2px solid #0d6efd !important;
+    border-radius: 10px !important;
+}
+
+/* Mensajes del chat */
+[data-testid="stChatMessage"] {
+    border-radius: 12px;
+    margin-bottom: 0.5rem;
+    border: 1px solid #e8ecf0;
+}
+
+/* Input del chat */
+[data-testid="stChatInput"] textarea {
+    border-radius: 12px !important;
+    border: 2px solid #0d6efd !important;
+}
+
+/* Botón Ko-fi */
+.kofi-btn {
+    display: inline-block;
+    background: #FF5E5B;
+    color: white !important;
+    padding: 0.5rem 1.2rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+.kofi-btn:hover { opacity: 0.85; }
+
+/* Badge de poder seleccionado */
+.poder-badge {
+    display: inline-block;
+    background: #e8f4fd;
+    color: #0d6efd;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+st.markdown("""
+<div class="header-box">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+            <h1>🇨🇷 TransparenciaCR</h1>
+            <p>Preguntale a la IA sobre sesiones oficiales del Estado</p>
+        </div>
+        <a href="https://ko-fi.com/xdiegocampos" target="_blank" class="kofi-btn">
+            ☕ Donar
+        </a>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Selector
+poder = st.selectbox("Buscar en:", [
+    "⚖️ Poder Legislativo — disponible ahora",
+    "🏛️ Poder Ejecutivo — próximamente",
+    "🔨 Poder Judicial — próximamente",
+    "🏙️ Municipalidades — próximamente",
+], label_visibility="collapsed")
+
+if "legislativo" not in poder.lower():
+    st.info("Esta sección estará disponible próximamente. ¡Apoyá el proyecto para acelerarlo!", icon="🚧")
+    st.stop()
+
+st.markdown('<div class="poder-badge">Buscando en: Asamblea Legislativa</div>', unsafe_allow_html=True)
+
+@st.cache_resource
+def cargar_chat():
+    db  = chromadb.PersistentClient(path="./chroma_db")
+    col = db.get_collection("transparencia_cr")
+    vs  = ChromaVectorStore(chroma_collection=col)
+    idx = VectorStoreIndex.from_vector_store(vs)
+    return idx.as_chat_engine(chat_mode="condense_plus_context", verbose=False)
+
+engine = cargar_chat()
+
+if "msgs" not in st.session_state:
+    st.session_state.msgs = [{
+        "role": "assistant",
+        "content": "¡Hola! Soy el asistente de TransparenciaCR. Puedo buscar en las sesiones de la Asamblea Legislativa.\n\n**Probá preguntas como:**\n- ¿Qué dijo el diputado X sobre el salario mínimo?\n- ¿Se discutió la ley de pensiones en 2025?\n- ¿Qué temas abordó la comisión de hacienda este año?"
+    }]
+
+for m in st.session_state.msgs:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
+
+if prompt := st.chat_input("Escribí tu pregunta sobre cualquier sesión legislativa..."):
+    st.session_state.msgs.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    with st.chat_message("assistant"):
+        with st.spinner("Buscando en las sesiones..."):
+            resp = engine.chat(prompt)
+            st.markdown(resp.response)
+            if resp.source_nodes:
+                with st.expander("📎 Ver fuentes"):
+                    for n in resp.source_nodes[:3]:
+                        url   = n.metadata.get("url", "")
+                        tit   = n.metadata.get("titulo", "Sesión")
+                        fecha = n.metadata.get("fecha", "")
+                        st.markdown(f"• [{tit}]({url}) — {fecha}")
+    st.session_state.msgs.append({"role": "assistant", "content": resp.response})

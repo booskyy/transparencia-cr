@@ -1,0 +1,14 @@
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
+from llama_index.vector_stores.chroma import ChromaVectorStore
+import chromadb
+
+docs = SimpleDirectoryReader("transcripciones", required_exts=[".txt"]).load_data()
+print(f"Documentos: {len(docs)}")
+
+db  = chromadb.PersistentClient(path="./chroma_db")
+col = db.get_or_create_collection("transparencia_cr")
+vs  = ChromaVectorStore(chroma_collection=col)
+sc  = StorageContext.from_defaults(vector_store=vs)
+
+VectorStoreIndex.from_documents(docs, storage_context=sc, show_progress=True)
+print("✅ Base de datos lista. Corré: streamlit run app.py")
