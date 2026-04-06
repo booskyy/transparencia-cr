@@ -4,7 +4,8 @@
     "type": "individual",
     "role": "maintainer",
     "name": "Diego Campos",
-    "email": "xdiegopianista@gmail.com",
+    "description": "Costa Rican civic tech developer building TransparenciaCR, an AI-powered platform that makes Costa Rican legislative sessions searchable via natural language chat. The tool transcribes and indexes thousands of hours of public sessions from the Legislative Assembly and other government branches, allowing citizens, journalists and researchers to ask questions and get precise answers with exact citations and links to official videos.",
+    "email": "xdiegocampos@hotmail.com",
     "webpageUrl": {
       "url": "https://huggingface.co/spaces/booskyy/transparencia-cr"
     }
@@ -12,18 +13,22 @@
   "projects": [{
     "guid": "transparencia-cr",
     "name": "TransparenciaCR",
-    "description": "AI-powered civic platform that makes Costa Rican legislative sessions searchable via natural language chat. Uses Whisper + RAG to transcribe and index thousands of hours of public sessions from all three branches of government.",
-    "webpageUrl": { "url": "https://github.com/booskyy/transparencia-cr" },
-    "repositoryUrl": { "url": "https://github.com/booskyy/transparencia-cr" },
-    "licenses": ["spdx:MIT"],
-    "tags": ["civic-tech", "transparency", "nlp", "rag", "spanish", "costa-rica", "democracy"]
+    "description": "AI-powered civic transparency platform for Costa Rica. Uses Whisper for automatic transcription and RAG with LlamaIndex to make thousands of hours of legislative sessions searchable via natural language. Citizens can ask 'What did deputy X say about minimum wage?' and get exact citations with timestamps and links to official YouTube videos. First platform of its kind in Central America. Open source under AGPL license.",
+    "webpageUrl": {
+      "url": "https://huggingface.co/spaces/booskyy/transparencia-cr"
+    },
+    "repositoryUrl": {
+      "url": "https://huggingface.co/spaces/booskyy/transparencia-cr"
+    },
+    "licenses": ["spdx:AGPL-3.0"],
+    "tags": ["civic-tech", "transparency", "nlp", "rag", "spanish", "costa-rica", "democracy", "open-source"]
   }],
   "funding": {
     "channels": [{
       "guid": "kofi",
       "type": "payment-provider",
       "address": "https://ko-fi.com/xdiegocampos",
-      "description": "Ko-fi donations"
+      "description": "Ko-fi donations to support TransparenciaCR development"
     }],
     "plans": [{
       "guid": "maintainer",
